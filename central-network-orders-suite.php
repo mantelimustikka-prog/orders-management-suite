@@ -245,6 +245,7 @@ function rc_network_orders_enqueue_scripts_final( $hook ) {
     @media (max-width:700px) { .rc-order-meta { flex-direction:column; } }
     .table-view-list th:nth-last-child(1), .table-view-list td:nth-last-child(1) { width: 8% !important; min-width: 90px; }
     .rc-country-code { font-size:1.2em; color:#8c8f94; font-weight:600; text-transform:uppercase; display:inline-block; margin-top:2px; }
+    .rc-country-code--non-gb { color:#000; }
     .rc-contact { font-size:13px; color:#333; line-height:1.3; }
     .rc-status-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
     .rc-status-pill { display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border-radius:20px; background:#f1f1f1; font-size:13px; color:#222; text-decoration:none; border:1px solid #e1e1e1; }
@@ -1373,7 +1374,7 @@ function rc_render_central_orders_table_final() {
                             <td><?php echo esc_html($o['date']); ?></td>
                             <td>
                                 <div><?php echo esc_html($o['customer']); ?></div>
-                                <?php if (!empty($o['country_code'])): ?><div class="rc-country-code"><?php echo esc_html($o['country_code']); ?></div><?php endif;?>
+                                <?php if (!empty($o['country_code'])): ?><div class="rc-country-code<?php echo ('GB' !== strtoupper(trim((string) $o['country_code']))) ? ' rc-country-code--non-gb' : ''; ?>"><?php echo esc_html($o['country_code']); ?></div><?php endif;?>
                             </td>
                             <td class="rc-contact">
                                 <?php if ( ! empty( $o['phone'] ) ) : ?><div><?php echo esc_html($o['phone']); ?></div><?php endif; ?>
