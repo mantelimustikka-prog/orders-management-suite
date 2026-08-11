@@ -998,6 +998,25 @@ function rc_render_central_orders_table_final() {
         );
     }
 
+    // Fetch true network-wide status counts via lightweight per-status count queries.
+    // This runs BEFORE the paginated order fetch so the status pills always reflect
+    // the grand total across ALL network sites, independent of pagination or search.
+    $network_status_counts = array();
+    foreach ( $all_status_labels as $slug => $label ) {
+        $network_status_counts[ $slug ] = 0;
+    }
+    foreach ( $target_blog_ids as $blog_id ) {
+        switch_to_blog( $blog_id );
+        if ( class_exists( 'WooCommerce' ) && function_exists( 'wc_orders_count' ) ) {
+            foreach ( $all_status_labels as $slug => $label ) {
+                if ( $slug === 'ghost' ) continue; // ghost is a virtual status; counted below via full fetch
+                $wc_status = 'wc-' . $slug;
+                $network_status_counts[ $slug ] += (int) wc_orders_count( $wc_status );
+            }
+        }
+        restore_current_blog();
+    }
+
     // Determine per-site fetch limit
     $blogs_count = max(1, count($target_blog_ids));
     if ( $search_query !== '' ) {
@@ -1161,13 +1180,12 @@ function rc_render_central_orders_table_final() {
         $searched_orders = $all_orders;
     }
 
-    // Compute status counts from all orders (unfiltered by search)
-    $status_counts = array();
-    foreach ( $all_status_labels as $slug => $label ) $status_counts[ $slug ] = 0;
+    // Merge ghost orders counted from $all_orders into network_status_counts.
+    // Ghost is a virtual status not present in WooCommerce, so add its count from the fetched orders.
     foreach ( $all_orders as $o ) {
-        $s = $o['status'];
-        if ( ! isset( $status_counts[ $s ] ) ) $status_counts[ $s ] = 0;
-        $status_counts[ $s ]++;
+        if ( $o['status'] === 'ghost' ) {
+            $network_status_counts['ghost']++;
+        }
     }
 
     // Apply status filter
@@ -1189,12 +1207,15 @@ function rc_render_central_orders_table_final() {
     $showing_from = $total_orders ? ($offset + 1) : 0;
     $showing_to = min( $offset + count($page_orders), $total_orders );
 
+    // Grand total across all statuses for the "All" pill
+    $network_total_all = array_sum( $network_status_counts );
+
     // Status bar markup: include only statuses with count > 0 (except All)
     $status_bar_html = '<div class="rc-status-bar">';
     $all_active = ($status_filter === 'all') ? ' active' : '';
-    $status_bar_html .= '<a class="rc-status-pill'. $all_active .'" href="'.esc_url(rc_build_orders_url_final(array('status_filter'=>'all','paged'=>1))).'">All <span style="opacity:.7;margin-left:6px;">('.intval(count($searched_orders)).')</span></a>';
+    $status_bar_html .= '<a class="rc-status-pill'. $all_active .'" href="'.esc_url(rc_build_orders_url_final(array('status_filter'=>'all','paged'=>1))).'">All <span style="opacity:.7;margin-left:6px;">('.intval($network_total_all).')</span></a>';
     foreach ( $all_status_labels as $slug => $label ) {
-        $count = isset($status_counts[$slug]) ? intval($status_counts[$slug]) : 0;
+        $count = isset($network_status_counts[$slug]) ? intval($network_status_counts[$slug]) : 0;
         if ( $count <= 0 ) continue; // hide statuses with zero orders
         $active = ($status_filter === $slug) ? ' active' : '';
         $status_bar_html .= '<a class="rc-status-pill'.$active.'" href="'.esc_url(rc_build_orders_url_final(array('status_filter'=>$slug,'paged'=>1))).'">'.esc_html($label).' <span style="opacity:.7;margin-left:6px;">('.$count.')</span></a>';
