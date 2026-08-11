@@ -1115,10 +1115,10 @@ function rc_render_central_orders_table_final() {
         $searched_orders = $all_orders;
     }
 
-    // Compute status counts from searched_orders
+    // Compute status counts from all orders (unfiltered by search)
     $status_counts = array();
     foreach ( $all_status_labels as $slug => $label ) $status_counts[ $slug ] = 0;
-    foreach ( $searched_orders as $o ) {
+    foreach ( $all_orders as $o ) {
         $s = $o['status'];
         if ( ! isset( $status_counts[ $s ] ) ) $status_counts[ $s ] = 0;
         $status_counts[ $s ]++;
