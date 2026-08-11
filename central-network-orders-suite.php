@@ -252,6 +252,14 @@ function rc_network_orders_enqueue_scripts_final( $hook ) {
     .rc-status-update-group { display:inline-flex; gap:6px; align-items:center; flex-wrap:nowrap; white-space:nowrap; }
     .rc-status-update-group .button { margin:0; white-space:nowrap; flex: 0 0 auto; }
     .rc-status-update-group select { min-width:140px; max-width:260px; flex: 0 0 auto; }
+    .rc-action-dropdown { position:relative; display:inline-flex; }
+    .rc-action-main-btn { border-radius:3px 0 0 3px !important; border-right:none !important; }
+    .rc-action-toggle-btn { border-radius:0 3px 3px 0 !important; padding:0 7px !important; min-width:0 !important; }
+    .rc-action-menu { display:none; position:absolute; top:100%; left:0; z-index:999; background:#fff; border:1px solid #ccd0d4; box-shadow:0 2px 6px rgba(0,0,0,.15); list-style:none; margin:2px 0 0; padding:0; min-width:140px; }
+    .rc-action-menu.rc-action-menu--open { display:block; }
+    .rc-action-menu li { margin:0; padding:0; }
+    .rc-action-menu-item { display:block; width:100%; background:none; border:none; padding:8px 12px; text-align:left; cursor:pointer; font-size:13px; line-height:1.4; color:#1d2327; }
+    .rc-action-menu-item:hover { background:#f0f0f1; }
     @media (max-width:640px) {
         .rc-status-update-group { display:flex; flex-wrap:wrap; }
         .rc-status-update-group select { min-width:120px; }
@@ -368,9 +376,27 @@ function rc_network_orders_enqueue_scripts_final( $hook ) {
             .always(function(){ $('#rc-bulk-update-btn, #rc-bulk-status-select').prop('disabled', false); updateBulkSummary(); });
         });
 
-        // Update status using the dropdown + button
-        $(document).on('click', '#rc-bulk-update-btn-status', function(e){
+        // Combined action dropdown toggle
+        $(document).on('click', '.rc-action-toggle-btn', function(e){
             e.preventDefault();
+            e.stopPropagation();
+            var $menu = $(this).siblings('.rc-action-menu');
+            var isOpen = $menu.hasClass('rc-action-menu--open');
+            $('.rc-action-menu').removeClass('rc-action-menu--open');
+            $('.rc-action-toggle-btn').attr('aria-expanded','false');
+            if ( ! isOpen ) {
+                $menu.addClass('rc-action-menu--open');
+                $(this).attr('aria-expanded','true');
+            }
+        });
+        $(document).on('click', function(e){
+            if ( ! $(e.target).closest('.rc-action-dropdown').length ) {
+                $('.rc-action-menu').removeClass('rc-action-menu--open');
+                $('.rc-action-toggle-btn').attr('aria-expanded','false');
+            }
+        });
+
+        function rcDoUpdateStatus(){
             var selected_status = $('#status_filter').val();
             if ( ! selected_status || selected_status === 'all' ) {
                 alert('Please select a specific status in the dropdown to update to (cannot use "All").');
@@ -408,6 +434,25 @@ function rc_network_orders_enqueue_scripts_final( $hook ) {
                 }
             }).fail(function(xhr,status,err){ console.error('Bulk AJAX error (status button):', status, err, xhr.responseText); alert('Bulk request failed'); })
             .always(function(){ $('#rc-bulk-update-btn-status, #status_filter').prop('disabled', false); updateBulkSummary(); });
+        }
+
+        // Update status using the dropdown + button
+        $(document).on('click', '#rc-bulk-update-btn-status', function(e){
+            e.preventDefault();
+            rcDoUpdateStatus();
+        });
+
+        // Action menu items
+        $(document).on('click', '.rc-action-menu-item', function(e){
+            e.preventDefault();
+            $('.rc-action-menu').removeClass('rc-action-menu--open');
+            $('.rc-action-toggle-btn').attr('aria-expanded','false');
+            var action = $(this).data('action');
+            if ( action === 'update-status' ) {
+                rcDoUpdateStatus();
+            } else if ( action === 'filter' ) {
+                $(this).closest('form').submit();
+            }
         });
 
         /* Order Preview */
@@ -1186,23 +1231,28 @@ function rc_render_central_orders_table_final() {
                 <form method="get" action="" style="display:inline-flex;align-items:center;">
                     <input type="hidden" name="page" value="network-orders-view" />
 
-                    <!-- Update status button + select -->
+                    <!-- Status select + combined action dropdown -->
                     <div class="rc-status-update-group">
-                        <button type="button" id="rc-bulk-update-btn-status" class="button">Update status</button>
-
                         <select name="status_filter" id="status_filter">
                             <option value="all" <?php selected($status_filter,'all'); ?>>All Statuses</option>
                             <?php foreach ($wc_statuses_for_select as $slug => $label) : ?>
                                 <option value="<?php echo esc_attr($slug); ?>" <?php selected($status_filter,$slug); ?>><?php echo esc_html($label); ?></option>
                             <?php endforeach; ?>
                         </select>
+
+                        <div class="rc-action-dropdown">
+                            <button type="button" id="rc-bulk-update-btn-status" class="button rc-action-main-btn">Update Status</button><button type="button" class="button rc-action-toggle-btn" aria-haspopup="true" aria-expanded="false">&#9660;</button>
+                            <ul class="rc-action-menu" role="menu">
+                                <li><button type="button" class="rc-action-menu-item" data-action="update-status">Update Status</button></li>
+                                <li><button type="button" class="rc-action-menu-item" data-action="filter">Filter</button></li>
+                            </ul>
+                        </div>
                     </div>
 
                     <input type="hidden" name="per_page" value="<?php echo esc_attr($per_page_param); ?>" />
                     <?php if (!empty($search_query)) : ?>
                         <input type="hidden" name="s" value="<?php echo esc_attr($search_query); ?>" />
                     <?php endif; ?>
-                    <input type="submit" class="button" value="Filter">
                 </form>
             </div>
 
