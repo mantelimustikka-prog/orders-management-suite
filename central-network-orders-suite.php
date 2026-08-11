@@ -1211,11 +1211,11 @@ function rc_render_central_orders_table_final() {
         <hr class="wp-header-end">
 
         <!-- Controls -->
-        <div class="tablenav top" style="margin-top:20px;display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;">
-            <div style="display:flex;gap:12px;align-items:center;">
+        <div class="tablenav top" style="margin-top:20px;display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:nowrap;">
+            <div style="display:flex;gap:12px;align-items:center;flex-shrink:0;">
                 <form method="get" action="" style="display:inline-flex;gap:6px;align-items:center;">
                     <input type="hidden" name="page" value="network-orders-view" />
-                    <label for="per_page_select">Orders per page:</label>
+                    <label for="per_page_select">Orders/page</label>
                     <select id="per_page_select" name="per_page">
                         <?php foreach ($allowed_per_page as $opt) : ?>
                             <option value="<?php echo esc_attr($opt); ?>" <?php selected($per_page_param,$opt); ?>><?php echo esc_html($opt); ?></option>
@@ -1228,7 +1228,7 @@ function rc_render_central_orders_table_final() {
                     <input type="submit" class="button" value="Apply">
                 </form>
 
-                <form method="get" action="" style="display:inline-flex;align-items:center;">
+                <form method="get" action="" style="display:inline-flex;align-items:center;gap:6px;">
                     <input type="hidden" name="page" value="network-orders-view" />
 
                     <!-- Status select + combined action dropdown -->
@@ -1249,15 +1249,22 @@ function rc_render_central_orders_table_final() {
                         </div>
                     </div>
 
+                    <!-- Search box inline, placeholder shown below -->
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <div style="display:flex;gap:4px;align-items:center;">
+                            <label class="screen-reader-text" for="order-search-input">Search Orders:</label>
+                            <input type="search" id="order-search-input" name="s" value="<?php echo esc_attr($search_query); ?>" style="width:140px;" />
+                            <input type="submit" id="search-submit" class="button" value="Search">
+                        </div>
+                        <span style="font-size:11px;color:#888;">zip, name, order #, email, phone</span>
+                    </div>
+
                     <input type="hidden" name="per_page" value="<?php echo esc_attr($per_page_param); ?>" />
-                    <?php if (!empty($search_query)) : ?>
-                        <input type="hidden" name="s" value="<?php echo esc_attr($search_query); ?>" />
-                    <?php endif; ?>
                 </form>
             </div>
 
             <div class="rc-controls-right">
-                <div style="font-size:13px;color:#555;">Showing <?php echo intval($showing_from); ?>–<?php echo intval($showing_to); ?> of <?php echo intval($total_orders); ?> orders</div>
+                <div style="font-size:13px;color:#555;"><?php echo intval($showing_from); ?>–<?php echo intval($showing_to); ?> of <?php echo intval($total_orders); ?> orders</div>
                 <div class="rc-pagination">
                     <?php
                     if ( $total_pages > 1 ) {
@@ -1283,18 +1290,6 @@ function rc_render_central_orders_table_final() {
                     ?>
                 </div>
             </div>
-        </div>
-
-        <!-- Search row -->
-        <div class="rc-search-row">
-            <form method="get" action="" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                <input type="hidden" name="page" value="network-orders-view" />
-                <input type="hidden" name="status_filter" value="<?php echo esc_attr($status_filter); ?>" />
-                <input type="hidden" name="per_page" value="<?php echo esc_attr($per_page_param); ?>" />
-                <label class="screen-reader-text" for="order-search-input">Search Orders:</label>
-                <input type="search" id="order-search-input" name="s" value="<?php echo esc_attr($search_query); ?>" placeholder="Search zip, first/last name, order #, email, phone..." />
-                <input type="submit" id="search-submit" class="button" value="Search">
-            </form>
         </div>
 
         <!-- Orders table -->
