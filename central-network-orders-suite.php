@@ -270,7 +270,7 @@ function rc_network_orders_enqueue_scripts_final( $hook ) {
         .rc-pagination { max-width:360px; }
     }
     .rc-controls-right { display:flex; gap:12px; align-items:center; }
-    .rc-search-row { width:100%; margin-top:10px; display:flex; justify-content:flex-start; gap:8px; align-items:center; }
+    .rc-search-row { width:100%; margin-top:10px; margin-bottom:24px; display:flex; justify-content:flex-start; gap:8px; align-items:center; }
     .rc-search-row input[type="search"] { width:360px; max-width:100%; }
     @media (max-width:640px) {
         .rc-search-row { flex-direction:column; align-items:flex-start; gap:6px; }
