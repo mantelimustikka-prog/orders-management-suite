@@ -916,7 +916,14 @@ function rc_render_central_orders_table_final() {
                     'customer' => trim( $first . ' ' . $last ),
                     'first_name' => $first,
                     'last_name' => $last,
-                    'payment_method' => $order->get_payment_method_title() ? $order->get_payment_method_title() : 'None',
+                    'payment_method' => $order->get_payment_method_title() ? $order->get_payment_method_title() : '',
+                    'shipping_method' => ( function() use ( $order ) {
+                        $methods = array();
+                        foreach ( $order->get_shipping_methods() as $shipping_item ) {
+                            $methods[] = $shipping_item->get_method_title();
+                        }
+                        return implode( ', ', $methods );
+                    } )(),
                     'zip' => $order->get_billing_postcode() ? $order->get_billing_postcode() : '',
                     'country_code' => $order->get_billing_country() ? $order->get_billing_country() : '',
                     'products' => $products_str,
@@ -1096,29 +1103,45 @@ function rc_render_central_orders_table_final() {
             <thead>
                 <tr>
                     <th style="width:3%;"><input type="checkbox" id="rc-select-all" /></th>
-                    <th style="width:10%;">Store</th>
-                    <th style="width:12%;">Order #</th>
-                    <th style="width:8%;">Action</th> <!-- moved Action here between Order # and Products -->
-                    <th style="width:18%;">Products</th>
-                    <th style="width:9%;">Total Orders</th> <!-- new column -->
-                    <th style="width:12%;">Date & Time</th>
-                    <th style="width:14%;">Name / Country</th>
-                    <th style="width:12%;">Phone / Email</th>
+                    <th style="width:9%;">Store</th>
+                    <th style="width:10%;">Order # / Zip</th>
+                    <th style="width:7%;">Action</th> <!-- moved Action here between Order # and Products -->
+                    <th style="width:15%;">Products</th>
+                    <th style="width:8%;">Total Orders</th> <!-- new column -->
+                    <th style="width:10%;">Date & Time</th>
+                    <th style="width:10%;">Name / Country</th>
+                    <th style="width:10%;">Phone / Email</th>
+                    <th style="width:8%;">Payment Method</th>
+                    <th style="width:8%;">Shipping Method</th>
                     <th style="width:7%;">Status</th>
-                    <th style="width:9%;">Total</th>
+                    <th style="width:7%;">Total</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ( empty($page_orders) ) : ?>
-                    <tr><td colspan="11" style="text-align:center;padding:20px;">No matching orders found.</td></tr>
+                    <tr><td colspan="13" style="text-align:center;padding:20px;">No matching orders found.</td></tr>
                 <?php else :
+                    $saved_status_colors = get_option( 'rc_tno_status_colors', array() );
+                    if ( ! is_array( $saved_status_colors ) ) {
+                        $saved_status_colors = array();
+                    }
+                    $default_badge_colors = array(
+                        'processing' => '#c6e1c6',
+                        'completed'  => '#e5e5e5',
+                        'ghost'      => '#efefef',
+                        'failed'     => '#f8b9b9',
+                        'cancelled'  => '#f8b9b9',
+                        'refunded'   => '#f8b9b9',
+                        'shipped'    => '#cfeef2',
+                    );
                     foreach ( $page_orders as $o ) :
-                        $badge_bg = '#f8dda7';
-                        if ( $o['status'] === 'processing' ) $badge_bg = '#c6e1c6';
-                        if ( $o['status'] === 'completed' )  $badge_bg = '#e5e5e5';
-                        if ( $o['status'] === 'ghost' ) $badge_bg = '#efefef';
-                        if ( in_array($o['status'], array('failed','cancelled','refunded')) ) $badge_bg = '#f8b9b9';
-                        if ( $o['status'] === 'shipped' ) $badge_bg = '#cfeef2';
+                        if ( isset( $saved_status_colors[ $o['status'] ] ) && '' !== $saved_status_colors[ $o['status'] ] ) {
+                            $badge_bg = $saved_status_colors[ $o['status'] ];
+                        } elseif ( isset( $default_badge_colors[ $o['status'] ] ) ) {
+                            $badge_bg = $default_badge_colors[ $o['status'] ];
+                        } else {
+                            $badge_bg = '#f8dda7';
+                        }
                         $status_label_display = isset($o['status_label']) ? $o['status_label'] : $o['status'];
                         // Build Total Orders display "T(n) : C(m)"
                         $t_total = isset($o['customer_total']) ? intval($o['customer_total']) : 1;
@@ -1162,6 +1185,8 @@ function rc_render_central_orders_table_final() {
                                 <?php if ( ! empty( $o['phone'] ) ) : ?><div><?php echo esc_html($o['phone']); ?></div><?php endif; ?>
                                 <?php if ( ! empty( $o['email'] ) ) : ?><div><?php echo esc_html($o['email']); ?></div><?php endif; ?>
                             </td>
+                            <td><?php echo esc_html( $o['payment_method'] ); ?></td>
+                            <td><?php echo esc_html( $o['shipping_method'] ); ?></td>
                             <td><span class="rc-status-badge" style="background:<?php echo esc_attr($badge_bg); ?>; padding:3px 6px; border-radius:4px; font-size:10px; font-weight:600; text-transform:uppercase; display:inline-block;"><?php echo esc_html($status_label_display); ?></span></td>
                             <td><?php echo wp_kses_post($o['total']); ?></td>
                         </tr>
@@ -1204,6 +1229,7 @@ function rc_network_orders_site_settings_overview() {
         <ul>
             <li><a href="<?php echo esc_url( admin_url( 'admin.php?page=rc-textmagic-sms-settings' ) ); ?>">SMS Notifications</a></li>
             <li><a href="<?php echo esc_url( admin_url( 'admin.php?page=rc-auto-status-rules' ) ); ?>">Auto Status Rules</a></li>
+            <li><a href="<?php echo esc_url( admin_url( 'admin.php?page=rc-status-colors' ) ); ?>">Order Status Colors</a></li>
         </ul>
     </div>
     <?php
@@ -1238,6 +1264,141 @@ function rc_auto_status_admin_menu_submenu() {
         'rc-auto-status-rules',
         'rc_auto_status_rules_page'
     );
+}
+
+/* Register order status colors submenu */
+add_action( 'admin_menu', 'rc_status_colors_admin_menu_submenu', 8 );
+function rc_status_colors_admin_menu_submenu() {
+    if ( ! is_admin() ) return;
+    add_submenu_page(
+        'rc-network-orders-site-settings',
+        'Order Status Colors',
+        'Order Status Colors',
+        'manage_options',
+        'rc-status-colors',
+        'rc_status_colors_settings_page'
+    );
+}
+
+function rc_status_colors_settings_page() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
+    }
+
+    // Collect all statuses from all network sites
+    $target_blog_ids = array( 1, 2, 8, 9, 12 );
+    $all_status_labels = array();
+    foreach ( $target_blog_ids as $blog_id ) {
+        switch_to_blog( $blog_id );
+        if ( class_exists( 'WooCommerce' ) && function_exists( 'wc_get_order_statuses' ) ) {
+            foreach ( wc_get_order_statuses() as $key => $label ) {
+                $slug = preg_replace( '/^wc-/', '', $key );
+                if ( ! isset( $all_status_labels[ $slug ] ) ) {
+                    $all_status_labels[ $slug ] = $label;
+                }
+            }
+        }
+        restore_current_blog();
+    }
+    if ( empty( $all_status_labels ) ) {
+        $all_status_labels = array(
+            'pending'    => 'Pending Payment',
+            'processing' => 'Processing',
+            'on-hold'    => 'On Hold',
+            'completed'  => 'Completed',
+            'cancelled'  => 'Cancelled',
+            'refunded'   => 'Refunded',
+            'failed'     => 'Failed',
+            'shipped'    => 'Shipped',
+        );
+    }
+    $all_status_labels['ghost'] = 'Ghost Orders';
+
+    // Handle save
+    $saved_message = '';
+    if ( isset( $_POST['rc_status_colors_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['rc_status_colors_nonce'] ) ), 'rc_status_colors_save' ) ) {
+        $colors = array();
+        foreach ( array_keys( $all_status_labels ) as $slug ) {
+            $field = 'rc_color_' . sanitize_key( $slug );
+            if ( isset( $_POST[ $field ] ) ) {
+                $color = sanitize_hex_color( wp_unslash( $_POST[ $field ] ) );
+                if ( $color ) {
+                    $colors[ $slug ] = $color;
+                }
+            }
+        }
+        update_option( 'rc_tno_status_colors', $colors );
+        $saved_message = '<div class="rc-notice">Colors saved successfully.</div>';
+    }
+
+    $saved_colors = get_option( 'rc_tno_status_colors', array() );
+    if ( ! is_array( $saved_colors ) ) {
+        $saved_colors = array();
+    }
+
+    // Default colors
+    $default_colors = array(
+        'processing' => '#c6e1c6',
+        'completed'  => '#e5e5e5',
+        'ghost'      => '#efefef',
+        'failed'     => '#f8b9b9',
+        'cancelled'  => '#f8b9b9',
+        'refunded'   => '#f8b9b9',
+        'shipped'    => '#cfeef2',
+    );
+    ?>
+    <div class="wrap">
+        <h1>Order Status Colors</h1>
+        <p>Assign a display color to each order status. These colors are used in the Network Orders view to style the status badges.</p>
+        <?php echo $saved_message; ?>
+        <form method="post" action="">
+            <?php wp_nonce_field( 'rc_status_colors_save', 'rc_status_colors_nonce' ); ?>
+            <table class="widefat striped" style="max-width:520px;">
+                <thead>
+                    <tr>
+                        <th style="width:50%;">Order Status</th>
+                        <th style="width:50%;">Color</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ( $all_status_labels as $slug => $label ) :
+                        $field_name = 'rc_color_' . sanitize_key( $slug );
+                        if ( isset( $saved_colors[ $slug ] ) && '' !== $saved_colors[ $slug ] ) {
+                            $current_color = $saved_colors[ $slug ];
+                        } elseif ( isset( $default_colors[ $slug ] ) ) {
+                            $current_color = $default_colors[ $slug ];
+                        } else {
+                            $current_color = '#f8dda7';
+                        }
+                        ?>
+                        <tr>
+                            <td><label for="<?php echo esc_attr( $field_name ); ?>"><?php echo esc_html( $label ); ?> <small style="color:#888;">(<?php echo esc_html( $slug ); ?>)</small></label></td>
+                            <td>
+                                <input type="color"
+                                    id="<?php echo esc_attr( $field_name ); ?>"
+                                    name="<?php echo esc_attr( $field_name ); ?>"
+                                    value="<?php echo esc_attr( $current_color ); ?>"
+                                    style="width:60px;height:32px;padding:2px;cursor:pointer;"
+                                />
+                                <span style="margin-left:8px;font-family:monospace;font-size:12px;" id="<?php echo esc_attr( $field_name ); ?>_val"><?php echo esc_html( $current_color ); ?></span>
+                                <script>
+                                (function(){
+                                    var inp = document.getElementById(<?php echo wp_json_encode( $field_name ); ?>);
+                                    var lbl = document.getElementById(<?php echo wp_json_encode( $field_name . '_val' ); ?>);
+                                    if(inp && lbl){inp.addEventListener('input',function(){lbl.textContent=this.value;});}
+                                })();
+                                </script>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <p class="submit">
+                <input type="submit" class="button button-primary" value="Save Colors" />
+            </p>
+        </form>
+    </div>
+    <?php
 }
 
 /* Register order status hook early */
