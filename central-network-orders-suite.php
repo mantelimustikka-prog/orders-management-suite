@@ -1307,7 +1307,7 @@ function rc_render_central_orders_table_final() {
                     <th style="width:10%;">Name / Country</th>
                     <th style="width:10%;">Phone / Email</th>
                     <th style="width:8%;">Payment Method</th>
-                    <th style="width:8%;">Shipping Method</th>
+                    <th style="width:16%;">Shipping Method</th>
                     <th style="width:7%;">Status</th>
                     <th style="width:7%;">Total</th>
                 </tr>
