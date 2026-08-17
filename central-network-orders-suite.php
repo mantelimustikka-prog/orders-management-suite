@@ -1028,10 +1028,43 @@ function rc_render_central_orders_table_final() {
         $per_site_limit = min( $per_site_limit, 1000 );
     }
 
-    // Customer aggregate map used for "Total Orders" and "Cancelled counts"
+    // Pass 1 (Count Only): Fetch ALL orders from every site to build accurate
+    // customer lifetime totals, independent of pagination limits.
     $customer_map = array();
+    foreach ( $target_blog_ids as $blog_id ) {
+        switch_to_blog( $blog_id );
+        if ( class_exists( 'WooCommerce' ) ) {
+            $count_orders = wc_get_orders( array( 'limit' => -1, 'orderby' => 'date', 'order' => 'DESC', 'return' => 'ids' ) );
+            foreach ( $count_orders as $count_order_id ) {
+                $count_order = wc_get_order( $count_order_id );
+                if ( ! $count_order ) { continue; }
+                $c_email = trim( (string) $count_order->get_billing_email() );
+                $c_phone = trim( (string) $count_order->get_billing_phone() );
+                $c_first = trim( (string) $count_order->get_billing_first_name() );
+                $c_last  = trim( (string) $count_order->get_billing_last_name() );
+                // Determine customer key (same logic as Pass 2)
+                if ( $c_email !== '' ) {
+                    $c_key = 'e:' . strtolower( $c_email );
+                } elseif ( $c_phone !== '' ) {
+                    $c_key = 'p:' . preg_replace( '/\D+/', '', $c_phone );
+                } elseif ( $c_first !== '' || $c_last !== '' ) {
+                    $c_key = 'n:' . strtolower( trim( $c_first . ' ' . $c_last ) );
+                } else {
+                    $c_key = 'o:' . intval( $blog_id ) . ':' . intval( $count_order_id );
+                }
+                if ( ! isset( $customer_map[ $c_key ] ) ) {
+                    $customer_map[ $c_key ] = array( 'total' => 0, 'cancelled' => 0 );
+                }
+                $customer_map[ $c_key ]['total']++;
+                if ( $count_order->get_status() === 'cancelled' ) {
+                    $customer_map[ $c_key ]['cancelled']++;
+                }
+            }
+        }
+        restore_current_blog();
+    }
 
-    // Aggregate orders (capture site-specific status label)
+    // Pass 2 (Display): Aggregate orders (capture site-specific status label)
     foreach ( $target_blog_ids as $blog_id ) {
         switch_to_blog( $blog_id );
         if ( class_exists( 'WooCommerce' ) ) {
@@ -1105,16 +1138,6 @@ function rc_render_central_orders_table_final() {
                     $customer_key = 'n:' . strtolower( trim( $first . ' ' . $last ) );
                 } else {
                     $customer_key = 'o:' . intval( $blog_id ) . ':' . intval( $order->get_id() );
-                }
-
-                // Update customer map counts
-                if ( ! isset( $customer_map[ $customer_key ] ) ) {
-                    $customer_map[ $customer_key ] = array( 'total' => 0, 'cancelled' => 0 );
-                }
-                $customer_map[ $customer_key ]['total']++;
-
-                if ( $status_slug === 'cancelled' ) {
-                    $customer_map[ $customer_key ]['cancelled']++;
                 }
 
                 $all_orders[] = array(
