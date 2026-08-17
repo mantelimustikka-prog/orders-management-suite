@@ -944,6 +944,70 @@ function rc_order_matches_search_final( $order, $q ) {
 }
 
 /* -------------------------------------------------------------------------
+ * Helper: query ALL network sites for a customer's lifetime order totals
+ * ------------------------------------------------------------------------- */
+function rc_get_customer_lifetime_totals( $customer_key, $target_blog_ids ) {
+    $total_orders   = 0;
+    $cancelled_count = 0;
+
+    // Determine query args from customer_key prefix
+    $key_type  = '';
+    $key_value = '';
+    if ( strpos( $customer_key, 'e:' ) === 0 ) {
+        $key_type  = 'email';
+        $key_value = substr( $customer_key, 2 );
+    } elseif ( strpos( $customer_key, 'p:' ) === 0 ) {
+        $key_type  = 'phone';
+        $key_value = substr( $customer_key, 2 );
+    } elseif ( strpos( $customer_key, 'n:' ) === 0 ) {
+        $key_type  = 'name';
+        $key_value = substr( $customer_key, 2 );
+    } else {
+        // 'o:blogid:orderid' — unique order, counts as 1 total
+        return array( 'total_orders' => 1, 'cancelled_orders' => 0 );
+    }
+
+    foreach ( $target_blog_ids as $blog_id ) {
+        switch_to_blog( $blog_id );
+
+        if ( class_exists( 'WooCommerce' ) ) {
+            $query_args = array(
+                'limit'   => -1,
+                'return'  => 'ids',
+                'orderby' => 'date',
+                'order'   => 'DESC',
+            );
+
+            if ( $key_type === 'email' ) {
+                $query_args['billing_email'] = $key_value;
+            } elseif ( $key_type === 'phone' ) {
+                $query_args['billing_phone'] = $key_value;
+            } elseif ( $key_type === 'name' ) {
+                $parts = explode( ' ', $key_value, 2 );
+                $query_args['billing_first_name'] = $parts[0];
+                $query_args['billing_last_name']  = isset( $parts[1] ) ? $parts[1] : '';
+            }
+
+            $site_order_ids = wc_get_orders( $query_args );
+            foreach ( $site_order_ids as $oid ) {
+                $total_orders++;
+                $site_order = wc_get_order( $oid );
+                if ( $site_order && $site_order->get_status() === 'cancelled' ) {
+                    $cancelled_count++;
+                }
+            }
+        }
+
+        restore_current_blog();
+    }
+
+    return array(
+        'total_orders'    => $total_orders,
+        'cancelled_orders' => $cancelled_count,
+    );
+}
+
+/* -------------------------------------------------------------------------
  * Main render for central orders table
  * ------------------------------------------------------------------------- */
 function rc_render_central_orders_table_final() {
@@ -1028,43 +1092,7 @@ function rc_render_central_orders_table_final() {
         $per_site_limit = min( $per_site_limit, 1000 );
     }
 
-    // Pass 1 (Count Only): Fetch ALL orders from every site to build accurate
-    // customer lifetime totals, independent of pagination limits.
-    $customer_map = array();
-    foreach ( $target_blog_ids as $blog_id ) {
-        switch_to_blog( $blog_id );
-        if ( class_exists( 'WooCommerce' ) ) {
-            $count_orders = wc_get_orders( array( 'limit' => -1, 'orderby' => 'date', 'order' => 'DESC', 'return' => 'ids' ) );
-            foreach ( $count_orders as $count_order_id ) {
-                $count_order = wc_get_order( $count_order_id );
-                if ( ! $count_order ) { continue; }
-                $c_email = trim( (string) $count_order->get_billing_email() );
-                $c_phone = trim( (string) $count_order->get_billing_phone() );
-                $c_first = trim( (string) $count_order->get_billing_first_name() );
-                $c_last  = trim( (string) $count_order->get_billing_last_name() );
-                // Determine customer key (same logic as Pass 2)
-                if ( $c_email !== '' ) {
-                    $c_key = 'e:' . strtolower( $c_email );
-                } elseif ( $c_phone !== '' ) {
-                    $c_key = 'p:' . preg_replace( '/\D+/', '', $c_phone );
-                } elseif ( $c_first !== '' || $c_last !== '' ) {
-                    $c_key = 'n:' . strtolower( trim( $c_first . ' ' . $c_last ) );
-                } else {
-                    $c_key = 'o:' . intval( $blog_id ) . ':' . intval( $count_order_id );
-                }
-                if ( ! isset( $customer_map[ $c_key ] ) ) {
-                    $customer_map[ $c_key ] = array( 'total' => 0, 'cancelled' => 0 );
-                }
-                $customer_map[ $c_key ]['total']++;
-                if ( $count_order->get_status() === 'cancelled' ) {
-                    $customer_map[ $c_key ]['cancelled']++;
-                }
-            }
-        }
-        restore_current_blog();
-    }
-
-    // Pass 2 (Display): Aggregate orders (capture site-specific status label)
+    // Aggregate orders (capture site-specific status label)
     foreach ( $target_blog_ids as $blog_id ) {
         switch_to_blog( $blog_id );
         if ( class_exists( 'WooCommerce' ) ) {
@@ -1180,19 +1208,6 @@ function rc_render_central_orders_table_final() {
     // Sort
     usort( $all_orders, function($a,$b){ return $b['timestamp'] <=> $a['timestamp']; } );
 
-    // Enrich each order with aggregated customer totals
-    foreach ( $all_orders as $idx => $o ) {
-        $key = $o['customer_key'] ?? '';
-        $total = 1;
-        $cancelled = 0;
-        if ( $key !== '' && isset( $customer_map[ $key ] ) ) {
-            $total = intval( $customer_map[ $key ]['total'] );
-            $cancelled = intval( $customer_map[ $key ]['cancelled'] );
-        }
-        $all_orders[ $idx ]['customer_total'] = $total;
-        $all_orders[ $idx ]['customer_cancelled'] = $cancelled;
-    }
-
     // Apply search filter first
     if ( $search_query !== '' ) {
         $searched_orders = array();
@@ -1229,6 +1244,16 @@ function rc_render_central_orders_table_final() {
     $page_orders = array_slice( $filtered_orders, $offset, $per_page );
     $showing_from = $total_orders ? ($offset + 1) : 0;
     $showing_to = min( $offset + count($page_orders), $total_orders );
+
+    // Build accurate customer lifetime totals for the customers on this page
+    // by querying ALL sites per unique customer key.
+    $customer_lifetime_totals = array();
+    foreach ( $page_orders as $o ) {
+        $ckey = isset( $o['customer_key'] ) ? $o['customer_key'] : '';
+        if ( $ckey !== '' && ! isset( $customer_lifetime_totals[ $ckey ] ) ) {
+            $customer_lifetime_totals[ $ckey ] = rc_get_customer_lifetime_totals( $ckey, $target_blog_ids );
+        }
+    }
 
     // Grand total across all statuses for the "All" pill
     $network_total_all = array_sum( $network_status_counts );
@@ -1382,9 +1407,15 @@ function rc_render_central_orders_table_final() {
                             $badge_bg = '#f8dda7';
                         }
                         $status_label_display = isset($o['status_label']) ? $o['status_label'] : $o['status'];
-                        // Build Total Orders display "T(n) : C(m)"
-                        $t_total = isset($o['customer_total']) ? intval($o['customer_total']) : 1;
-                        $c_cancel = isset($o['customer_cancelled']) ? intval($o['customer_cancelled']) : 0;
+                        // Build Total Orders display "T(n) : C(m)" from per-customer network query
+                        $ckey_row = isset( $o['customer_key'] ) ? $o['customer_key'] : '';
+                        if ( $ckey_row !== '' && isset( $customer_lifetime_totals[ $ckey_row ] ) ) {
+                            $t_total  = intval( $customer_lifetime_totals[ $ckey_row ]['total_orders'] );
+                            $c_cancel = intval( $customer_lifetime_totals[ $ckey_row ]['cancelled_orders'] );
+                        } else {
+                            $t_total  = 1;
+                            $c_cancel = 0;
+                        }
                         $total_orders_display = 'T(' . $t_total . ') : C(' . $c_cancel . ')';
                         ?>
                         <tr data-blog-id="<?php echo esc_attr($o['blog_id']); ?>" data-order-id="<?php echo esc_attr($o['order_id']); ?>">
